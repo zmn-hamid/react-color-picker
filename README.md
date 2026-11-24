@@ -1,6 +1,6 @@
 # React Color Picker
 
-A local-only Chrome extension for designers to select a page element, preview its background color live, and copy the component context and chosen color. Palette colors are saved in `chrome.storage.local` and are available across sites. The extension makes no network requests.
+A local-only Chrome extension for designers to select a page element, preview a chosen color property live, and copy the component context and chosen color. Palette colors are saved in `chrome.storage.local` and are available across sites. The extension makes no network requests.
 
 ## Install
 
