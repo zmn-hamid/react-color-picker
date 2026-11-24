@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "React Color Picker",
+  "version": "1.0.0",
+  "description": "Pick an element, preview colors live, and copy its React context and chosen color.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": { "default_title": "Pick an element color" },
+  "background": { "service_worker": "background.js" }
+}
