@@ -66,6 +66,13 @@
     const panel = doc.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'React Color Picker');
     const heading = doc.createElement('h2'); heading.textContent = 'Pick an element';
     const help = doc.createElement('p'); help.textContent = 'Hover to highlight, then click an element to preview its background color. Escape cancels.';
+    const targetLabel = doc.createElement('label'); targetLabel.textContent = 'Change'; targetLabel.style.cssText = 'display:block;margin:10px 0 4px;font-weight:600';
+    const target = doc.createElement('select'); target.className = 'hex'; target.style.width = '100%'; target.setAttribute('aria-label', 'Element part to recolor');
+    const properties = [
+      ['background-color', 'Background'], ['color', 'Text'], ['border-color', 'Border'],
+      ['outline-color', 'Outline'], ['text-decoration-color', 'Text decoration'], ['fill', 'SVG fill'], ['stroke', 'SVG stroke']
+    ];
+    properties.forEach(([value, label]) => { const option = doc.createElement('option'); option.value = value; option.textContent = label; target.append(option); });
     const controls = doc.createElement('div'); controls.className = 'controls';
     const wheel = doc.createElement('input'); wheel.type = 'color'; wheel.value = '#ffffff'; wheel.setAttribute('aria-label', 'Choose color');
     const hex = doc.createElement('input'); hex.className = 'hex'; hex.value = '#ffffff'; hex.maxLength = 7; hex.setAttribute('aria-label', 'Hex color');
@@ -78,10 +85,10 @@
     const cancel = doc.createElement('button'); cancel.className = 'button'; cancel.textContent = 'Cancel';
     buttons.append(add, accept, cancel);
     const message = doc.createElement('div'); message.className = 'message';
-    panel.append(heading, help, controls, paletteTitle, palette, buttons, message);
+    panel.append(heading, help, targetLabel, target, controls, paletteTitle, palette, buttons, message);
     shadow.append(style, outline, panel); doc.documentElement.appendChild(host);
 
-    let selecting = true, closed = false, timer, selected = null, originalBackground = '', colors = [];
+    let selecting = true, closed = false, timer, selected = null, activeProperty = target.value, originals = {}, colors = [];
     const eventTypes = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
     const inside = event => event.composedPath().includes(host);
     function drawPalette() {
@@ -99,7 +106,7 @@
     function setColor(color) {
       if (!validHex(color)) return;
       color = color.toLowerCase(); wheel.value = color; hex.value = color;
-      if (selected) selected.style.backgroundColor = color;
+      if (selected) selected.style.setProperty(activeProperty, color);
       drawPalette();
     }
     function move(event) {
@@ -112,8 +119,10 @@
       event.preventDefault(); event.stopImmediatePropagation();
       if (event.type === 'click') {
         selected = event.target;
-        originalBackground = selected.style.getPropertyValue('background-color');
-        const computed = win.getComputedStyle(selected).backgroundColor;
+        originals = {};
+        properties.forEach(([property]) => { originals[property] = { value: selected.style.getPropertyValue(property), priority: selected.style.getPropertyPriority(property) }; });
+        activeProperty = target.value;
+        const computed = win.getComputedStyle(selected).getPropertyValue(activeProperty);
         const rgb = computed.match(/\d+/g);
         const initial = rgb?.length >= 3 ? '#' + rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('') : '#ffffff';
         selecting = false; outline.hidden = true; heading.textContent = 'Preview element color';
@@ -124,12 +133,28 @@
     function cleanup(restore = true) {
       if (closed) return; closed = true;
       if (timer) win.clearTimeout(timer);
-      if (restore && selected) selected.style.backgroundColor = originalBackground;
+      if (restore && selected) {
+        for (const [property, original] of Object.entries(originals)) {
+          if (original.value) selected.style.setProperty(property, original.value, original.priority);
+          else selected.style.removeProperty(property);
+        }
+      }
       doc.removeEventListener('pointermove', move, true);
       for (const type of eventTypes) doc.removeEventListener(type, intercept, true);
       doc.removeEventListener('keydown', keydown, true); host.remove(); delete win[KEY];
     }
     function keydown(event) { if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); cleanup(true); } }
+    target.addEventListener('change', () => {
+      if (!selected) { activeProperty = target.value; return; }
+      const previous = originals[activeProperty];
+      if (previous?.value) selected.style.setProperty(activeProperty, previous.value, previous.priority);
+      else selected.style.removeProperty(activeProperty);
+      activeProperty = target.value;
+      const computed = win.getComputedStyle(selected).getPropertyValue(activeProperty);
+      const rgb = computed.match(/\d+/g);
+      const initial = rgb?.length >= 3 ? '#' + rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('') : '#ffffff';
+      setColor(initial);
+    });
     wheel.addEventListener('input', () => setColor(wheel.value));
     hex.addEventListener('input', () => { if (validHex(hex.value)) setColor(hex.value); });
     add.addEventListener('click', async () => {
@@ -148,8 +173,9 @@
         source ? `Component source: ${source}` : `React component (nearest first): ${names.join(' → ') || '(unavailable)'}`,
         `Element: ${selected.localName}`,
         `DOM selector: ${selectorFor(selected)}`,
-        `Background color: ${color}`,
-        `CSS: background-color: ${color};`
+        `Target: ${target.options[target.selectedIndex].textContent}`,
+        `Color: ${color}`,
+        `CSS: ${activeProperty}: ${color};`
       ].join('\n');
       accept.disabled = true; message.textContent = 'Copying component context and color…';
       const copied = await copyText(text, doc, win.navigator.clipboard);
